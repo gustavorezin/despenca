@@ -58,5 +58,15 @@ test.describe("fluxo fundacional", () => {
     await page.goto("/lista");
     await expect(page.getByText("Provavelmente acabando")).toBeVisible();
     await expect(page.getByText("Arroz")).toBeVisible();
+
+    // Quando: confirma "Tem" depois de ter marcado "Acabou" (bug relatado —
+    // a confiança subia mas a quantidade ficava travada em "acabou")
+    await page.goto("/despensa");
+    await page.getByRole("button", { name: "Arroz" }).click();
+    await page.getByRole("button", { name: /Tem\s+confirma/ }).click();
+
+    // Então: "Tem" afirma que o Item existe — a quantidade não pode mais
+    // aparecer como "acabou"
+    await expect(page.getByText("acabou", { exact: true })).toHaveCount(0);
   });
 });

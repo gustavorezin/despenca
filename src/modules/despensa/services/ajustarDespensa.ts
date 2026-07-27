@@ -1,7 +1,10 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { DespensaRepository } from "@/modules/despensa/repository/DespensaRepository";
-import { calcularConfianca } from "@/modules/aprendizado/domain/estimativa";
+import {
+  calcularConfianca,
+  calcularNovaQtdAposAjuste,
+} from "@/modules/aprendizado/domain/estimativa";
 import { recalcularSugestoes } from "@/modules/lista/services/recalcularSugestoes";
 
 // Ajuste rápido (ADR-007). `valor` é o contrato do PRECISO: obrigatório nele e
@@ -58,21 +61,18 @@ export async function ajustarDespensa({
 
     await DespensaRepository.registrarAjuste({ db: tx, casaId, itemId, tipo, valor });
 
-    const novaQtd =
-      tipo === "ACABOU"
-        ? 0
-        : tipo === "PRECISO"
-          ? (valor ?? qtdAtual)
-          : tipo === "POUCO"
-            ? qtdAtual <= 1
-              ? qtdAtual
-              : Math.floor(qtdAtual / 2)
-            : qtdAtual; // TEM: mantém
-
     // historicoItem enxerga o ajuste recém-gravado como evento mais recente,
-    // então a confiança reflete a intenção do usuário (Tem→alta, Acabou→baixa).
+    // então a confiança reflete a intenção do usuário (Tem→alta, Acabou→baixa);
+    // qtdUltimaCompra serve de base para "Tem"/"Pouco" quando a estimativa
+    // atual já zerou (ver calcularNovaQtdAposAjuste).
     const historico = await DespensaRepository.historicoItem({ db: tx, casaId, itemId });
     const confianca = calcularConfianca(historico, hoje);
+    const novaQtd = calcularNovaQtdAposAjuste({
+      tipo,
+      valor,
+      qtdAtual,
+      qtdUltimaCompra: historico.qtdUltimaCompra,
+    });
 
     await DespensaRepository.upsertItem({
       db: tx,

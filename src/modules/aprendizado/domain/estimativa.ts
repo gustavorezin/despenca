@@ -69,6 +69,34 @@ export function rederivarQtdEstimada(
   return h.qtdUltimaCompra ?? qtdAtual ?? 0;
 }
 
+/**
+ * Nova `qtdEstimada` após um ajuste rápido (ADR-007). "Tem" e "Pouco" afirmam
+ * que o Item ainda existe — nunca deixam a estimativa em zero (zerar é papel
+ * exclusivo do "Acabou"). Se ela já estava zerada (ex.: "Acabou" confirmado
+ * depois com "Tem"), parte da quantidade da última Compra — mesmo fallback da
+ * rederivação (ADR-023) — ou de 1, sem histórico de Compra.
+ */
+export function calcularNovaQtdAposAjuste({
+  tipo,
+  valor,
+  qtdAtual,
+  qtdUltimaCompra,
+}: {
+  tipo: TipoAjuste;
+  valor?: number;
+  qtdAtual: number;
+  qtdUltimaCompra: number | null;
+}): number {
+  if (tipo === "ACABOU") return 0;
+  if (tipo === "PRECISO") return valor ?? qtdAtual;
+
+  const base =
+    qtdAtual > 0 ? qtdAtual : qtdUltimaCompra && qtdUltimaCompra > 0 ? qtdUltimaCompra : 1;
+
+  if (tipo === "TEM") return base;
+  return base <= 1 ? base : Math.floor(base / 2); // POUCO: reduz, nunca zera.
+}
+
 const PONTUACAO_POR_AJUSTE: Record<TipoAjuste, number> = {
   TEM: 0.9,
   PRECISO: 0.85,

@@ -6,6 +6,7 @@ import {
   gerarExplicacao,
   diasDesde,
   rederivarQtdEstimada,
+  calcularNovaQtdAposAjuste,
   type HistoricoItem,
   type HistoricoRederivacao,
 } from "@/modules/aprendizado/domain/estimativa";
@@ -196,6 +197,111 @@ describe("calcularConfianca — o ajuste manual mais recente domina", () => {
 
     // Então
     expect(nivel).toBe("alta");
+  });
+});
+
+describe("calcularNovaQtdAposAjuste", () => {
+  it("dado 'Acabou', então zera independente da quantidade atual ou do histórico", () => {
+    // Dado / Quando / Então
+    expect(
+      calcularNovaQtdAposAjuste({
+        tipo: "ACABOU",
+        qtdAtual: 5,
+        qtdUltimaCompra: 8,
+      }),
+    ).toBe(0);
+  });
+
+  it("dado 'Preciso' com valor informado, então usa o valor exato", () => {
+    // Dado / Quando / Então
+    expect(
+      calcularNovaQtdAposAjuste({
+        tipo: "PRECISO",
+        valor: 3,
+        qtdAtual: 5,
+        qtdUltimaCompra: null,
+      }),
+    ).toBe(3);
+  });
+
+  it("dado 'Tem' com estimativa positiva, então mantém a quantidade atual", () => {
+    // Dado / Quando / Então
+    expect(
+      calcularNovaQtdAposAjuste({
+        tipo: "TEM",
+        qtdAtual: 4,
+        qtdUltimaCompra: null,
+      }),
+    ).toBe(4);
+  });
+
+  it("dado 'Tem' após a estimativa ter zerado (ex.: 'Acabou' anterior), então parte da última Compra", () => {
+    // Dado: bug relatado — confiança sobe mas a quantidade ficava travada em 0
+    const resultado = calcularNovaQtdAposAjuste({
+      tipo: "TEM",
+      qtdAtual: 0,
+      qtdUltimaCompra: 3,
+    });
+
+    // Então
+    expect(resultado).toBe(3);
+    expect(resultado).toBeGreaterThan(0);
+  });
+
+  it("dado 'Tem' com estimativa zerada e sem histórico de Compra, então assume 1", () => {
+    // Dado / Quando / Então
+    expect(
+      calcularNovaQtdAposAjuste({
+        tipo: "TEM",
+        qtdAtual: 0,
+        qtdUltimaCompra: null,
+      }),
+    ).toBe(1);
+  });
+
+  it("dado 'Pouco' com estimativa acima de 1, então reduz pela metade", () => {
+    // Dado / Quando / Então
+    expect(
+      calcularNovaQtdAposAjuste({
+        tipo: "POUCO",
+        qtdAtual: 6,
+        qtdUltimaCompra: null,
+      }),
+    ).toBe(3);
+  });
+
+  it("dado 'Pouco' com estimativa em 1, então mantém — nunca zera por essa via", () => {
+    // Dado / Quando / Então
+    expect(
+      calcularNovaQtdAposAjuste({
+        tipo: "POUCO",
+        qtdAtual: 1,
+        qtdUltimaCompra: null,
+      }),
+    ).toBe(1);
+  });
+
+  it("dado 'Pouco' com estimativa já zerada, então parte da última Compra (reduzida) e nunca zera", () => {
+    // Dado / Quando / Então
+    const resultado = calcularNovaQtdAposAjuste({
+      tipo: "POUCO",
+      qtdAtual: 0,
+      qtdUltimaCompra: 4,
+    });
+
+    expect(resultado).toBe(2);
+    expect(resultado).toBeGreaterThan(0);
+  });
+
+  it("dado 'Pouco' com estimativa zerada e sem histórico de Compra, então assume 1", () => {
+    // Dado / Quando / Então
+    expect(
+      calcularNovaQtdAposAjuste({
+        tipo: "POUCO",
+        qtdAtual: 0,
+        qtdUltimaCompra: null,
+      }),
+    ).toBe(1);
   });
 });
 
