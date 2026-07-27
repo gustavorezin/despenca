@@ -1,6 +1,6 @@
 # ADR-008: Explicações da IA em tap-to-expand (nunca bloqueiam)
 
-- **Status:** Aceito
+- **Status:** Aceito — ações do drawer ajustadas pelo [ADR-026](./ADR-026-aceite-implicito-da-sugestao.md) (aceite implícito, sem botão "aceitar")
 - **Data:** 2026-06-28
 - **Fase do produto:** 0 (MVP)
 - **Decisor(es):** Gustavo Rezin Durigon

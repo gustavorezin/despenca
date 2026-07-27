@@ -1,19 +1,13 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import type { EntradaCompra } from "@/modules/compra/services/entradaCompra";
 import { comoUnidade, type Unidade } from "@/modules/item/domain/unidades";
 import { comoCategoria, type Categoria } from "@/modules/item/domain/categorias";
 import { dataISOLocal } from "@/shared/utils/data";
+import { useBuscaItens, type ItemBusca } from "@/shared/ui/useBuscaItens";
 import { DetalheItemSheet } from "./DetalheItemSheet";
 import { IconeX, IconeLupa, IconeMais, IconeMenos } from "@/shared/ui/icones";
-
-type ItemBusca = {
-  id: string;
-  nomeCanonico: string;
-  categoria: string | null;
-  unidadePadrao: string | null;
-};
 
 export type ChipCompra = {
   nome: string;
@@ -39,38 +33,12 @@ export function FormularioCompra({
   aoConfirmar: (entrada: EntradaCompra) => Promise<void>;
 }) {
   const hojeISO = dataISOLocal(new Date());
-  const [termo, setTermo] = useState("");
-  const [sugestoes, setSugestoes] = useState<ItemBusca[]>([]);
+  const { termo, setTermo, sugestoes, limpar } = useBuscaItens();
   const [descricao, setDescricao] = useState(inicial?.descricao ?? "");
   const [dataISO, setDataISO] = useState(inicial?.dataISO ?? hojeISO);
   const [chips, setChips] = useState<ChipCompra[]>(inicial?.itens ?? []);
   const [chipAberto, setChipAberto] = useState<string | null>(null);
   const [enviando, iniciar] = useTransition();
-
-  // Autocomplete: busca nos Itens da Casa a partir do 2º caractere, com debounce.
-  useEffect(() => {
-    const q = termo.trim();
-    const controlador = new AbortController();
-    const t = setTimeout(async () => {
-      if (q.length < 2) {
-        setSugestoes([]);
-        return;
-      }
-      try {
-        const res = await fetch(`/api/itens?termo=${encodeURIComponent(q)}`, {
-          signal: controlador.signal,
-        });
-        const dados = await res.json();
-        setSugestoes(dados.itens ?? []);
-      } catch {
-        /* aborto ou rede — ignora */
-      }
-    }, 200);
-    return () => {
-      clearTimeout(t);
-      controlador.abort();
-    };
-  }, [termo]);
 
   const jaAdicionado = (nome: string) =>
     chips.some((c) => c.nome.toLowerCase() === nome.toLowerCase());
@@ -85,7 +53,7 @@ export function FormularioCompra({
   function adicionar(nome: string, item?: ItemBusca) {
     const limpo = nome.trim();
     if (!limpo || jaAdicionado(limpo)) {
-      setTermo("");
+      limpar();
       return;
     }
     setChips((cs) => [
@@ -97,7 +65,7 @@ export function FormularioCompra({
         categoria: comoCategoria(item?.categoria),
       },
     ]);
-    setTermo("");
+    limpar();
   }
 
   function alterarChip(nome: string, mudancas: Partial<ChipCompra>) {

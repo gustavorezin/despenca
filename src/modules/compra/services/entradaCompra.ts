@@ -1,12 +1,12 @@
 import { z } from "zod";
 import { CATEGORIAS } from "@/modules/item/domain/categorias";
 import { UNIDADES } from "@/modules/item/domain/unidades";
-import { dataDeISOLocal, dataISOLocal } from "@/shared/utils/data";
 
 /**
  * Contrato compartilhado de registrar e editar Compra (ADR-021/ADR-022).
  * Uma Compra tem ao menos 1 item; descrição e data são opcionais (data ausente
- * = hoje). A data trafega como "YYYY-MM-DD" para não sofrer shift de fuso.
+ * = hoje). A data trafega como "YYYY-MM-DD" para não sofrer shift de fuso; as
+ * regras do cabeçalho (data futura proibida) vivem em domain/cabecalho.ts.
  */
 export const entradaCompraSchema = z.object({
   descricao: z.string().trim().max(80, "Descrição muito longa.").optional(),
@@ -27,21 +27,3 @@ export const entradaCompraSchema = z.object({
 });
 
 export type EntradaCompra = z.infer<typeof entradaCompraSchema>;
-
-/**
- * Resolve o cabeçalho da Compra a partir da entrada já validada: descrição
- * vazia vira null, data ausente vira `hoje`, data futura é proibida (ADR-021).
- * A comparação é por dia de calendário local ("YYYY-MM-DD" ordena lexicamente).
- */
-export function resolverCabecalho(
-  entrada: EntradaCompra,
-  hoje = new Date(),
-): { descricao: string | null; data: Date } {
-  if (entrada.data && entrada.data > dataISOLocal(hoje)) {
-    throw new Error("A data da Compra não pode ser no futuro.");
-  }
-  return {
-    descricao: entrada.descricao ? entrada.descricao : null,
-    data: entrada.data ? dataDeISOLocal(entrada.data) : hoje,
-  };
-}

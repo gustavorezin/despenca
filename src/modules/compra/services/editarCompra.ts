@@ -1,20 +1,21 @@
 import { prisma } from "@/lib/prisma";
 import { ItemRepository } from "@/modules/item/repository/ItemRepository";
 import { CompraRepository } from "@/modules/compra/repository/CompraRepository";
-import { rederivarDespensa } from "@/modules/despensa/services/rederivarDespensa";
+import { aplicarCompraNaDespensa } from "@/modules/despensa/services/aplicarCompraNaDespensa";
 import { ListaRepository } from "@/modules/lista/repository/ListaRepository";
 import { recalcularSugestoes } from "@/modules/lista/services/recalcularSugestoes";
+import { resolverCabecalho } from "@/modules/compra/domain/cabecalho";
 import {
   entradaCompraSchema,
-  resolverCabecalho,
   type EntradaCompra,
 } from "@/modules/compra/services/entradaCompra";
 
 /**
  * Caso de uso: editar uma Compra existente (descrição, data, itens) — ADR-023.
- * As linhas são trocadas por inteiro e a Despensa é rederivada para a união
- * dos Itens antigos e novos (um Item removido da Compra também precisa
- * recalcular). Sugestões são regeneradas na mesma transação.
+ * As linhas são trocadas por inteiro; a Despensa desfaz a contribuição antiga
+ * de cada Item afetado (união dos antigos e novos — um Item removido também
+ * precisa recalcular) e refaz a nova, pontualmente. Sugestões são regeneradas
+ * na mesma transação.
  */
 export async function editarCompra({
   casaId,
@@ -45,7 +46,7 @@ export async function editarCompra({
   );
 
   await prisma.$transaction(async (tx) => {
-    const { itemIdsAntigos } = await CompraRepository.atualizarComItens({
+    const { dataAntiga, itensAntigos } = await CompraRepository.atualizarComItens({
       db: tx,
       casaId,
       compraId,
@@ -58,16 +59,35 @@ export async function editarCompra({
     for (const linha of linhas) {
       await ItemRepository.atualizarClassificacao({
         db: tx,
+        casaId,
         itemId: linha.itemId,
         categoria: linha.categoria,
         unidadePadrao: linha.unidade,
       });
     }
 
-    const itemIdsNovos = [...new Set(linhas.map((l) => l.itemId))];
-    const afetados = [...new Set([...itemIdsAntigos, ...itemIdsNovos])];
+    // Soma por Item (uma Compra pode, em tese, repetir o mesmo Item em duas
+    // linhas). A Despensa desfaz a contribuição antiga de cada Item afetado
+    // e refaz a nova — um Item removido na edição vira "qtdNova: 0" (ADR-023).
+    const quantidadeNovaPorItem = new Map<string, number>();
+    for (const l of linhas) {
+      quantidadeNovaPorItem.set(l.itemId, (quantidadeNovaPorItem.get(l.itemId) ?? 0) + l.quantidade);
+    }
+    const quantidadeAntigaPorItem = new Map(itensAntigos.map((i) => [i.itemId, i.quantidade]));
+    const itemIdsNovos = [...quantidadeNovaPorItem.keys()];
+    const afetados = new Set([...quantidadeAntigaPorItem.keys(), ...itemIdsNovos]);
 
-    await rederivarDespensa({ db: tx, casaId, itemIds: afetados });
+    await aplicarCompraNaDespensa({
+      db: tx,
+      casaId,
+      itens: [...afetados].map((itemId) => ({
+        itemId,
+        dataAntiga,
+        qtdAntiga: quantidadeAntigaPorItem.get(itemId) ?? 0,
+        dataNova: data,
+        qtdNova: quantidadeNovaPorItem.get(itemId) ?? 0,
+      })),
+    });
 
     // Item adicionado na edição sai da Lista, coerente com o registro.
     await ListaRepository.marcarComprados({

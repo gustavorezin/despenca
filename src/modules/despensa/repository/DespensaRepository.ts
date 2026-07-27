@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import type { TipoAjuste } from "@/modules/despensa/domain/estimativa";
+import type { TipoAjuste } from "@/modules/aprendizado/domain/estimativa";
 
 type LinhaHistorico = {
   numeroCompras: number;
@@ -81,9 +81,10 @@ export const DespensaRepository = {
   },
 
   /**
-   * Histórico de proxies de um Item, para (re)calcular confiança e quantidade.
-   * `qtdUltimaCompra` soma as linhas do Item na Compra de data mais recente
-   * (empate de data desempatado por `criadaEm`) — base da rederivação (ADR-023).
+   * Histórico de proxies de um Item, para (re)calcular confiança. `qtdUltimaCompra`
+   * soma as linhas do Item na Compra de data mais recente (empate de data
+   * desempatado por `criadaEm`) — usada como base de "Tem"/"Pouco" quando a
+   * estimativa já zerou (`calcularNovaQtdAposAjuste`, em ajustarDespensa).
    */
   async historicoItem({
     db = prisma,

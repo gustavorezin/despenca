@@ -3,7 +3,7 @@ import {
   intervaloMedioDias,
   gerarSugestao,
   type HistoricoAprendizado,
-} from "@/modules/learning/domain/motor";
+} from "@/modules/aprendizado/domain/motor";
 
 const hoje = new Date("2026-07-12T12:00:00Z");
 const diasAtras = (n: number) => new Date(hoje.getTime() - n * 86_400_000);

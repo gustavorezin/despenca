@@ -1,6 +1,6 @@
 # Product Specification
 
-**Versão:** v0.2.0 — 2026-07-12
+**Versão:** v0.3.0 — 2026-07-14
 
 ---
 
@@ -75,9 +75,9 @@ O usuário nunca vê os termos "inventário", "normalização" ou percentuais de
 ### 3.6 Sugestões da IA
 
 - Toda Sugestão é identificada visualmente com badge.
-- Toda Sugestão é editável: o usuário pode aceitar, editar quantidade ou rejeitar.
+- Toda Sugestão é editável. O **aceite é implícito** — não há botão "aceitar": editar a quantidade é o gesto de aceite, e protege a Sugestão (e a quantidade escolhida) do recálculo automático. (ver [ADR-026](./adr/ADR-026-aceite-implicito-da-sugestao.md))
 - Toda Sugestão tem explicação acessível com 1 toque — nunca inline, sempre em bottom sheet sob demanda. (ver [ADR-008](./adr/ADR-008-explicacao-em-tap-to-expand.md))
-- [F1] O usuário pode dispensar uma Sugestão via swipe — esse gesto é um sinal negativo de aprendizado.
+- [F1] O usuário pode dispensar uma Sugestão via swipe (inclusive uma já aceita) — esse gesto é um sinal negativo de aprendizado.
 - Correções feitas pelo usuário alimentam o aprendizado futuro do sistema.
 
 ### 3.7 Ajuste de despensa
@@ -140,6 +140,9 @@ Ver tabela cross-referenciada com [ADR-019](./adr/ADR-019-faseamento.md). Regra 
 | Notificações push | **Adiada para fase posterior (ADR-024).** Quando entrar: máximo 1 por dia por Casa; deep-link direto para a Lista (ADR-016) |
 | "Marcar da lista" como 2ª via de registro | Disponível quando a Lista tem ao menos 1 Item (ADR-017) |
 | Swipe para dispensar Sugestão | Sinal negativo de aprendizado (ADR-013) |
+| Aceite implícito da Sugestão | Editar a quantidade aceita e protege do recálculo; sem botão "aceitar" (ADR-026) |
+
+**Critério de pronto do F1:** Camila, com a Lista alimentada pelo uso do F0, consegue: registrar uma Compra de ontem com nome ("Mercado Extra") e data retroativa; corrigir uma Compra errada e ver a Despensa se ajustar sozinha; fazer uma ida ao mercado inteira pelo Modo Mercado — marcar os Itens por prateleira e registrar a Compra pré-preenchida sem redigitar nada; e dispensar com um deslize uma Sugestão que não faz sentido, sem que ela volte antes da próxima Compra.
 
 ### 4.3 Fase 2 — IA mais inteligente
 
@@ -227,3 +230,4 @@ Os itens abaixo nunca farão parte deste produto ou estão explicitamente fora d
 | Edição e exclusão de Compra com rederivação da Despensa | [ADR-023](./adr/ADR-023-edicao-e-exclusao-de-compra.md) |
 | Notificações push adiadas para fase posterior | [ADR-024](./adr/ADR-024-adiamento-das-notificacoes-push.md) |
 | Dicas de uso centralizadas na Conta | [ADR-025](./adr/ADR-025-dicas-de-uso-na-conta.md) |
+| Aceite implícito da Sugestão (editar quantidade aceita) | [ADR-026](./adr/ADR-026-aceite-implicito-da-sugestao.md) |

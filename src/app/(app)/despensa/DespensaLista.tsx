@@ -8,7 +8,7 @@ import type {
   GrupoDespensa,
   LinhaDespensa,
 } from "@/modules/despensa/services/listarDespensa";
-import type { NivelConfianca } from "@/modules/despensa/domain/estimativa";
+import type { NivelConfianca } from "@/modules/aprendizado/domain/estimativa";
 import { comoUnidade, type Unidade } from "@/modules/item/domain/unidades";
 import {
   comoCategoria,

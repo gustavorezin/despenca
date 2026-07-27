@@ -22,8 +22,8 @@ Guia de como escrever testes unitários aqui. Segue as convenções do repositó
 
 - Framework: **Vitest** (`npm run test` executa; `npm run test:watch` observa).
 - Arquivos em **`tests/`** na raiz, **espelhando o caminho de `src/`**:
-  `src/modules/despensa/domain/estimativa.ts` → `tests/modules/despensa/domain/estimativa.test.ts`.
-- Importe pelo alias `@/` (ex.: `import { calcularConfianca } from "@/modules/despensa/domain/estimativa"`).
+  `src/modules/aprendizado/domain/estimativa.ts` → `tests/modules/aprendizado/domain/estimativa.test.ts`.
+- Importe pelo alias `@/` (ex.: `import { calcularConfianca } from "@/modules/aprendizado/domain/estimativa"`).
 
 ## Convenções de escrita
 

@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { prisma } from "@/lib/prisma";
 import { ItemRepository } from "@/modules/item/repository/ItemRepository";
 import { CATEGORIAS } from "@/modules/item/domain/categorias";
 import { UNIDADES } from "@/modules/item/domain/unidades";
@@ -23,16 +22,13 @@ export async function classificarItem({
 }): Promise<void> {
   const dados = classificarItemSchema.parse(entrada);
 
-  // Guard multi-tenant: só classifica Item da própria Casa.
-  const item = await prisma.item.findFirst({
-    where: { id: dados.itemId, casaId },
-    select: { id: true },
-  });
-  if (!item) throw new Error("Item não encontrado.");
-
-  await ItemRepository.atualizarClassificacao({
+  // O filtro por casaId no repositório é a guarda multi-tenant: Item de outra
+  // Casa não é encontrado, e a escrita não acontece.
+  const { encontrado } = await ItemRepository.atualizarClassificacao({
+    casaId,
     itemId: dados.itemId,
     categoria: dados.categoria,
     unidadePadrao: dados.unidadePadrao,
   });
+  if (!encontrado) throw new Error("Item não encontrado.");
 }

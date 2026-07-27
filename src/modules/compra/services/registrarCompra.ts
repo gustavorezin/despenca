@@ -1,12 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import { ItemRepository } from "@/modules/item/repository/ItemRepository";
 import { CompraRepository } from "@/modules/compra/repository/CompraRepository";
-import { rederivarDespensa } from "@/modules/despensa/services/rederivarDespensa";
+import { aplicarCompraNaDespensa } from "@/modules/despensa/services/aplicarCompraNaDespensa";
 import { ListaRepository } from "@/modules/lista/repository/ListaRepository";
 import { recalcularSugestoes } from "@/modules/lista/services/recalcularSugestoes";
+import { resolverCabecalho } from "@/modules/compra/domain/cabecalho";
 import {
   entradaCompraSchema,
-  resolverCabecalho,
   type EntradaCompra,
 } from "@/modules/compra/services/entradaCompra";
 
@@ -59,15 +59,33 @@ export async function registrarCompra({
     for (const linha of linhas) {
       await ItemRepository.atualizarClassificacao({
         db: tx,
+        casaId,
         itemId: linha.itemId,
         categoria: linha.categoria,
         unidadePadrao: linha.unidade,
       });
     }
 
-    const itemIds = [...new Set(linhas.map((l) => l.itemId))];
+    // Soma por Item (uma Compra pode, em tese, repetir o mesmo Item em duas
+    // linhas) — a Despensa soma o que foi comprado agora ao que já havia
+    // (§4.3: Compra é reabastecimento, nunca sinal de consumo — ADR-013).
+    const quantidadePorItem = new Map<string, number>();
+    for (const l of linhas) {
+      quantidadePorItem.set(l.itemId, (quantidadePorItem.get(l.itemId) ?? 0) + l.quantidade);
+    }
+    const itemIds = [...quantidadePorItem.keys()];
 
-    await rederivarDespensa({ db: tx, casaId, itemIds });
+    await aplicarCompraNaDespensa({
+      db: tx,
+      casaId,
+      itens: itemIds.map((itemId) => ({
+        itemId,
+        dataAntiga: null,
+        qtdAntiga: 0,
+        dataNova: data,
+        qtdNova: quantidadePorItem.get(itemId)!,
+      })),
+    });
 
     // Itens comprados saem da Lista; em seguida o motor regenera as Sugestões.
     await ListaRepository.marcarComprados({ db: tx, casaId, itemIds });

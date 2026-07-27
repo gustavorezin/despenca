@@ -1,3 +1,4 @@
+import { redirect } from "next/navigation";
 import { getSessao } from "@/shared/auth/sessao";
 import OnboardingCliente from "./OnboardingCliente";
 
@@ -6,5 +7,10 @@ import OnboardingCliente from "./OnboardingCliente";
 // pré-preencher o campo do passo 2.
 export default async function OnboardingPage() {
   const sessao = await getSessao();
-  return <OnboardingCliente nomeInicial={sessao?.user?.name ?? ""} />;
+  if (!sessao?.usuarioId) redirect("/login");
+  // Quem já tem Casa não passa de novo pelo onboarding: evita criar uma
+  // segunda Casa órfã (a sessão sempre resolve a primeira, por criadoEm).
+  if (sessao.casaId) redirect("/lista");
+
+  return <OnboardingCliente nomeInicial={sessao.user?.name ?? ""} />;
 }

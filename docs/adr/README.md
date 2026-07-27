@@ -40,6 +40,7 @@ Para criar um novo ADR: copie [`_template.md`](./_template.md), nomeie como `ADR
 - [ADR-023](./ADR-023-edicao-e-exclusao-de-compra.md) — Edição e exclusão de Compra — Compras editáveis/excluíveis com rederivação da Despensa por Item afetado.
 - [ADR-024](./ADR-024-adiamento-das-notificacoes-push.md) — Adiamento das notificações push — push sai do escopo da Fase 1; formato do ADR-016 permanece válido.
 - [ADR-025](./ADR-025-dicas-de-uso-na-conta.md) — Dicas de uso na Conta — página estática com dicas por tela; sem tour guiado nem cards contextuais.
+- [ADR-026](./ADR-026-aceite-implicito-da-sugestao.md) — Aceite implícito da Sugestão — sem botão "aceitar"; editar a quantidade aceita a Sugestão e a protege do recálculo.
 
 ### Fase 3 — Captura por imagem 📷
 
@@ -84,3 +85,4 @@ Para criar um novo ADR: copie [`_template.md`](./_template.md), nomeie como `ADR
 | ADR-023 | Edição e exclusão de Compra | Aceito | 2026-07-12 |
 | ADR-024 | Adiamento das notificações push | Aceito | 2026-07-12 |
 | ADR-025 | Dicas de uso na Conta | Aceito | 2026-07-12 |
+| ADR-026 | Aceite implícito da Sugestão | Aceito | 2026-07-14 |

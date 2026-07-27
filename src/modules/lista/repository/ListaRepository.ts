@@ -1,6 +1,6 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import type { MotivoSugestao } from "@/modules/learning/domain/motor";
+import type { MotivoSugestao } from "@/modules/aprendizado/domain/motor";
 
 /*
   Acesso a dados da Lista (ListaItem). Único a tocar Prisma. Métodos usados no
@@ -20,29 +20,48 @@ export const ListaRepository = {
     });
   },
 
-  async criarSugestao({
+  /** Materializa as Sugestões de um recálculo numa escrita só. */
+  async criarSugestoes({
     db = prisma,
     casaId,
-    itemId,
-    motivo,
-    qtdSugerida,
+    sugestoes,
   }: {
     db?: Prisma.TransactionClient;
     casaId: string;
-    itemId: string;
-    motivo: MotivoSugestao;
-    qtdSugerida: number;
+    sugestoes: { itemId: string; motivo: MotivoSugestao; qtdSugerida: number }[];
   }) {
-    await db.listaItem.create({
-      data: {
+    if (sugestoes.length === 0) return;
+    await db.listaItem.createMany({
+      data: sugestoes.map((s) => ({
         casaId,
-        itemId,
-        origem: "SUGESTAO",
-        motivo,
-        qtdSugerida,
-        status: "ATIVO",
-      },
+        itemId: s.itemId,
+        origem: "SUGESTAO" as const,
+        motivo: s.motivo,
+        qtdSugerida: s.qtdSugerida,
+        status: "ATIVO" as const,
+      })),
     });
+  },
+
+  /**
+   * Aceite implícito (ADR-026): editar a quantidade de uma Sugestão ativa a
+   * torna ACEITO — o recálculo deixa de apagá-la/regenerá-la, preservando a
+   * quantidade escolhida. Devolve se havia uma Sugestão ativa para aceitar.
+   */
+  async aceitarSugestao({
+    casaId,
+    id,
+    qtdSugerida,
+  }: {
+    casaId: string;
+    id: string;
+    qtdSugerida: number;
+  }): Promise<{ aceitou: boolean }> {
+    const { count } = await prisma.listaItem.updateMany({
+      where: { id, casaId, origem: "SUGESTAO", status: "ATIVO" },
+      data: { status: "ACEITO", qtdSugerida },
+    });
+    return { aceitou: count > 0 };
   },
 
   async criarManual({

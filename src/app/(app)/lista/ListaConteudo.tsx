@@ -1,15 +1,11 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import Link from "next/link";
 import { BottomSheet } from "@/shared/ui/BottomSheet";
 import { LinhaDeslizavel } from "@/shared/ui/LinhaDeslizavel";
-import {
-  IconeMais,
-  IconeMenos,
-  IconeInfo,
-  IconeLupa,
-} from "@/shared/ui/icones";
+import { SheetAdicionarItem } from "@/shared/ui/SheetAdicionarItem";
+import { IconeMais, IconeMenos, IconeInfo } from "@/shared/ui/icones";
 import type { GrupoLista, LinhaLista } from "@/modules/lista/services/montarLista";
 import {
   descartarAction,
@@ -17,43 +13,12 @@ import {
   adicionarItemAction,
 } from "./actions";
 
-type ItemBusca = { id: string; nomeCanonico: string; categoria: string | null };
-
 export function ListaConteudo({ grupos }: { grupos: GrupoLista[] }) {
   const [sheet, setSheet] = useState<LinhaLista | null>(null);
   const [addOpen, setAddOpen] = useState(false);
-  const [termo, setTermo] = useState("");
-  const [sugestoes, setSugestoes] = useState<ItemBusca[]>([]);
   const [qtdLocal, setQtdLocal] = useState<Record<string, number>>({});
   const [, iniciar] = useTransition();
 
-  // Autocomplete do "Adicionar item" (mesmo padrão do registro, ADR-005).
-  useEffect(() => {
-    if (!addOpen) return;
-    const q = termo.trim();
-    const controlador = new AbortController();
-    const t = setTimeout(async () => {
-      if (q.length < 2) {
-        setSugestoes([]);
-        return;
-      }
-      try {
-        const res = await fetch(`/api/itens?termo=${encodeURIComponent(q)}`, {
-          signal: controlador.signal,
-        });
-        const dados = await res.json();
-        setSugestoes(dados.itens ?? []);
-      } catch {
-        /* aborto/rede — ignora */
-      }
-    }, 200);
-    return () => {
-      clearTimeout(t);
-      controlador.abort();
-    };
-  }, [termo, addOpen]);
-
-  const semResultados = termo.trim().length >= 2 && sugestoes.length === 0;
   const temSugestao = grupos.some((g) => g.itens.some((i) => i.ehSugestao));
 
   function qtdDe(linha: LinhaLista) {
@@ -76,13 +41,9 @@ export function ListaConteudo({ grupos }: { grupos: GrupoLista[] }) {
   }
 
   function adicionar(nome: string) {
-    const limpo = nome.trim();
-    if (!limpo) return;
     setAddOpen(false);
-    setTermo("");
-    setSugestoes([]);
     iniciar(() => {
-      adicionarItemAction(limpo);
+      adicionarItemAction(nome);
     });
   }
 
@@ -160,7 +121,7 @@ export function ListaConteudo({ grupos }: { grupos: GrupoLista[] }) {
                       <IconeMenos tamanho={15} />
                     </button>
                     <span className="min-w-[58px] text-center text-[13.5px] font-bold text-tinta">
-                      {qtdDe(linha)} {linha.qtyText.split(" ").slice(1).join(" ")}
+                      {qtdDe(linha)} {linha.unidade}
                     </span>
                     <button
                       type="button"
@@ -247,74 +208,11 @@ export function ListaConteudo({ grupos }: { grupos: GrupoLista[] }) {
       </BottomSheet>
 
       {/* Adicionar item manual (ADR-003) */}
-      <BottomSheet
+      <SheetAdicionarItem
         aberto={addOpen}
-        aoFechar={() => {
-          setAddOpen(false);
-          setTermo("");
-          setSugestoes([]);
-        }}
-        ariaLabel="Adicionar item"
-      >
-        <h2 className="mb-3.5 text-[20px] font-extrabold tracking-tight text-tinta">
-          Adicionar item
-        </h2>
-        <div className="flex items-center gap-2.5 rounded-[15px] border-[1.5px] border-borda-forte bg-superficie px-3.5 py-3 focus-within:border-acento">
-          <span className="text-suave-2">
-            <IconeLupa tamanho={19} />
-          </span>
-          <input
-            value={termo}
-            onChange={(e) => setTermo(e.target.value)}
-            placeholder="Buscar item…"
-            autoFocus
-            className="flex-1 bg-transparent text-[16px] text-tinta outline-none"
-          />
-        </div>
-        <div className="mt-3 max-h-[46vh] overflow-y-auto">
-          {termo.trim().length < 2 && (
-            <div className="py-6 text-center text-[13.5px] text-suave-2">
-              Digite ao menos 2 letras para buscar.
-            </div>
-          )}
-          {sugestoes.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => adicionar(s.nomeCanonico)}
-              className="mb-2 flex w-full items-center justify-between gap-2.5 rounded-[14px] border border-borda bg-superficie p-3.5 text-left"
-            >
-              <span>
-                <span className="block text-[15px] font-bold text-tinta">
-                  {s.nomeCanonico}
-                </span>
-                {s.categoria && (
-                  <span className="mt-px block text-[12px] text-suave-2">
-                    {s.categoria}
-                  </span>
-                )}
-              </span>
-              <span className="flex text-acento">
-                <IconeMais tamanho={20} strokeWidth={2.3} />
-              </span>
-            </button>
-          ))}
-          {semResultados && (
-            <button
-              type="button"
-              onClick={() => adicionar(termo)}
-              className="flex w-full items-center gap-2.5 rounded-[14px] bg-superficie p-3.5 text-left text-[14.5px] font-bold text-acento"
-              style={{
-                border:
-                  "1.5px dashed color-mix(in srgb, var(--color-acento) 32%, #fff)",
-              }}
-            >
-              <IconeMais tamanho={18} strokeWidth={2.3} />
-              Adicionar “{termo.trim()}”
-            </button>
-          )}
-        </div>
-      </BottomSheet>
+        aoFechar={() => setAddOpen(false)}
+        aoAdicionar={adicionar}
+      />
     </>
   );
 }

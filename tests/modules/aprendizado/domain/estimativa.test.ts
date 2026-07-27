@@ -5,10 +5,10 @@ import {
   textoQuantidade,
   gerarExplicacao,
   diasDesde,
-  rederivarQtdEstimada,
+  calcularNovaQtdAposAjuste,
+  ajustarQtdAposEscritaDeCompra,
   type HistoricoItem,
-  type HistoricoRederivacao,
-} from "@/modules/despensa/domain/estimativa";
+} from "@/modules/aprendizado/domain/estimativa";
 
 const hoje = new Date("2026-07-11T12:00:00Z");
 const diasAtras = (n: number) => new Date(hoje.getTime() - n * 86_400_000);
@@ -199,119 +199,266 @@ describe("calcularConfianca — o ajuste manual mais recente domina", () => {
   });
 });
 
-describe("rederivarQtdEstimada", () => {
-  function historicoRederivacao(
-    over: Partial<HistoricoRederivacao> = {},
-  ): HistoricoRederivacao {
-    return { ...historico(), qtdUltimaCompra: 2, ...over };
-  }
-
-  it("dado um item sem compras e sem ajuste, então remove da Despensa", () => {
-    // Dado
-    const h = historicoRederivacao({
-      numeroCompras: 0,
-      ultimaCompraEm: null,
-      qtdUltimaCompra: null,
-      ultimoAjuste: null,
-    });
-
-    // Quando
-    const qtd = rederivarQtdEstimada(h, 3);
-
-    // Então
-    expect(qtd).toBeNull();
+describe("calcularNovaQtdAposAjuste", () => {
+  it("dado 'Acabou', então zera independente da quantidade atual ou do histórico", () => {
+    // Dado / Quando / Então
+    expect(
+      calcularNovaQtdAposAjuste({
+        tipo: "ACABOU",
+        qtdAtual: 5,
+        qtdUltimaCompra: 8,
+      }),
+    ).toBe(0);
   });
 
-  it("dado um item sem compras mas com ajuste, então mantém a quantidade atual", () => {
-    // Dado: todas as Compras do item foram excluídas, mas houve "Preciso"
-    const h = historicoRederivacao({
-      numeroCompras: 0,
-      ultimaCompraEm: null,
-      qtdUltimaCompra: null,
-      ultimoAjuste: { tipo: "PRECISO", em: diasAtras(3) },
-    });
-
-    // Quando
-    const qtd = rederivarQtdEstimada(h, 4);
-
-    // Então
-    expect(qtd).toBe(4);
+  it("dado 'Preciso' com valor informado, então usa o valor exato", () => {
+    // Dado / Quando / Então
+    expect(
+      calcularNovaQtdAposAjuste({
+        tipo: "PRECISO",
+        valor: 3,
+        qtdAtual: 5,
+        qtdUltimaCompra: null,
+      }),
+    ).toBe(3);
   });
 
-  it("dado um ajuste mais recente que a última compra, então a quantidade atual é preservada", () => {
-    // Dado: usuário marcou "Acabou" ontem; a Compra editada é mais antiga
-    const h = historicoRederivacao({
-      ultimaCompraEm: diasAtras(10),
-      qtdUltimaCompra: 5,
-      ultimoAjuste: { tipo: "ACABOU", em: diasAtras(1) },
+  it("dado 'Tem' com estimativa positiva, então mantém a quantidade atual", () => {
+    // Dado / Quando / Então
+    expect(
+      calcularNovaQtdAposAjuste({
+        tipo: "TEM",
+        qtdAtual: 4,
+        qtdUltimaCompra: null,
+      }),
+    ).toBe(4);
+  });
+
+  it("dado 'Tem' após a estimativa ter zerado (ex.: 'Acabou' anterior), então parte da última Compra", () => {
+    // Dado: bug relatado — confiança sobe mas a quantidade ficava travada em 0
+    const resultado = calcularNovaQtdAposAjuste({
+      tipo: "TEM",
+      qtdAtual: 0,
+      qtdUltimaCompra: 3,
     });
 
-    // Quando
-    const qtd = rederivarQtdEstimada(h, 0);
+    // Então
+    expect(resultado).toBe(3);
+    expect(resultado).toBeGreaterThan(0);
+  });
+
+  it("dado 'Tem' com estimativa zerada e sem histórico de Compra, então assume 1", () => {
+    // Dado / Quando / Então
+    expect(
+      calcularNovaQtdAposAjuste({
+        tipo: "TEM",
+        qtdAtual: 0,
+        qtdUltimaCompra: null,
+      }),
+    ).toBe(1);
+  });
+
+  it("dado 'Pouco' com estimativa acima de 1, então reduz pela metade", () => {
+    // Dado / Quando / Então
+    expect(
+      calcularNovaQtdAposAjuste({
+        tipo: "POUCO",
+        qtdAtual: 6,
+        qtdUltimaCompra: null,
+      }),
+    ).toBe(3);
+  });
+
+  it("dado 'Pouco' com estimativa em 1, então mantém — nunca zera por essa via", () => {
+    // Dado / Quando / Então
+    expect(
+      calcularNovaQtdAposAjuste({
+        tipo: "POUCO",
+        qtdAtual: 1,
+        qtdUltimaCompra: null,
+      }),
+    ).toBe(1);
+  });
+
+  it("dado 'Pouco' com estimativa já zerada, então parte da última Compra (reduzida) e nunca zera", () => {
+    // Dado / Quando / Então
+    const resultado = calcularNovaQtdAposAjuste({
+      tipo: "POUCO",
+      qtdAtual: 0,
+      qtdUltimaCompra: 4,
+    });
+
+    expect(resultado).toBe(2);
+    expect(resultado).toBeGreaterThan(0);
+  });
+
+  it("dado 'Pouco' com estimativa zerada e sem histórico de Compra, então assume 1", () => {
+    // Dado / Quando / Então
+    expect(
+      calcularNovaQtdAposAjuste({
+        tipo: "POUCO",
+        qtdAtual: 0,
+        qtdUltimaCompra: null,
+      }),
+    ).toBe(1);
+  });
+});
+
+describe("ajustarQtdAposEscritaDeCompra", () => {
+  it("dado registrar uma Compra sem nenhum Ajuste, então soma ao que já havia", () => {
+    // Dado: bug relatado — 3 Compras manuais de 1 arroz cada ficavam em 1un
+    let qtd = 0;
+    for (let i = 0; i < 3; i++) {
+      qtd = ajustarQtdAposEscritaDeCompra({
+        qtdAtual: qtd,
+        ultimoAjuste: null,
+        dataAntiga: null,
+        qtdAntiga: 0,
+        dataNova: diasAtras(0),
+        qtdNova: 1,
+      });
+    }
 
     // Então
+    expect(qtd).toBe(3);
+  });
+
+  it("dado registrar uma Compra retroativa mais antiga que o último Ajuste, então não altera a estimativa", () => {
+    // Dado: usuário esqueceu de registrar uma compra de antes do "Acabou"
+    const qtd = ajustarQtdAposEscritaDeCompra({
+      qtdAtual: 0,
+      ultimoAjuste: { em: diasAtras(5) },
+      dataAntiga: null,
+      qtdAntiga: 0,
+      dataNova: diasAtras(10),
+      qtdNova: 4,
+    });
+
+    // Então: o Ajuste já redefiniu o estado depois dessa Compra (ADR-013)
     expect(qtd).toBe(0);
   });
 
-  it("dado uma compra mais recente que o ajuste, então a quantidade da última compra prevalece", () => {
+  it("dado registrar uma Compra após 'Acabou', então soma a partir de zero", () => {
     // Dado
-    const h = historicoRederivacao({
-      ultimaCompraEm: diasAtras(1),
-      qtdUltimaCompra: 6,
-      ultimoAjuste: { tipo: "POUCO", em: diasAtras(9) },
+    const qtd = ajustarQtdAposEscritaDeCompra({
+      qtdAtual: 0,
+      ultimoAjuste: { em: diasAtras(2) },
+      dataAntiga: null,
+      qtdAntiga: 0,
+      dataNova: diasAtras(0),
+      qtdNova: 2,
     });
 
-    // Quando
-    const qtd = rederivarQtdEstimada(h, 1);
+    // Então
+    expect(qtd).toBe(2);
+  });
+
+  it("dado registrar uma Compra após 'Tem', então soma à quantidade confirmada", () => {
+    // Dado: "Tem" confirmou 5 (valor não recuperável do histórico — por isso
+    // soma sobre `qtdAtual`, não recompõe do zero)
+    const qtd = ajustarQtdAposEscritaDeCompra({
+      qtdAtual: 5,
+      ultimoAjuste: { em: diasAtras(3) },
+      dataAntiga: null,
+      qtdAntiga: 0,
+      dataNova: diasAtras(0),
+      qtdNova: 1,
+    });
 
     // Então
     expect(qtd).toBe(6);
   });
 
-  it("dado uma edição que altera a quantidade da última compra, então a Despensa reflete a nova quantidade", () => {
-    // Dado: a Compra mais recente passou de 2 para 8 unidades
-    const h = historicoRederivacao({
-      ultimaCompraEm: diasAtras(2),
-      qtdUltimaCompra: 8,
+  it("dado editar uma Compra alterando a quantidade de um Item, então soma só a diferença", () => {
+    // Dado: a Compra tinha 1 unidade e passou a ter 5 (mesma data)
+    const data = diasAtras(1);
+    const qtd = ajustarQtdAposEscritaDeCompra({
+      qtdAtual: 3, // 3 compras de 1 já registradas, incluindo esta
       ultimoAjuste: null,
+      dataAntiga: data,
+      qtdAntiga: 1,
+      dataNova: data,
+      qtdNova: 5,
     });
 
-    // Quando
-    const qtd = rederivarQtdEstimada(h, 2);
-
-    // Então
-    expect(qtd).toBe(8);
+    // Então: 3 - 1 (desfaz) + 5 (refaz) = 7
+    expect(qtd).toBe(7);
   });
 
-  it("dado ajuste e compra no mesmo instante, então o ajuste domina", () => {
-    // Dado: empate de timestamps (consistente com calcularConfianca)
-    const mesmoInstante = diasAtras(1);
-    const h = historicoRederivacao({
-      ultimaCompraEm: mesmoInstante,
-      qtdUltimaCompra: 7,
-      ultimoAjuste: { tipo: "ACABOU", em: mesmoInstante },
-    });
-
-    // Quando
-    const qtd = rederivarQtdEstimada(h, 0);
-
-    // Então
-    expect(qtd).toBe(0);
-  });
-
-  it("dado um item novo sem DespensaItem atual, então nasce com a quantidade da última compra", () => {
-    // Dado
-    const h = historicoRederivacao({
-      ultimaCompraEm: diasAtras(0),
-      qtdUltimaCompra: 3,
+  it("dado editar um campo que não muda a quantidade, então a estimativa não se altera", () => {
+    // Dado: só a descrição mudou; quantidade antiga e nova são iguais
+    const data = diasAtras(1);
+    const qtd = ajustarQtdAposEscritaDeCompra({
+      qtdAtual: 3,
       ultimoAjuste: null,
+      dataAntiga: data,
+      qtdAntiga: 1,
+      dataNova: data,
+      qtdNova: 1,
     });
-
-    // Quando
-    const qtd = rederivarQtdEstimada(h, null);
 
     // Então
     expect(qtd).toBe(3);
+  });
+
+  it("dado editar uma Compra mais antiga que o último Ajuste, então não afeta a estimativa atual", () => {
+    // Dado: a Compra editada já estava "coberta" por um Ajuste posterior
+    const qtd = ajustarQtdAposEscritaDeCompra({
+      qtdAtual: 2,
+      ultimoAjuste: { em: diasAtras(5) },
+      dataAntiga: diasAtras(10),
+      qtdAntiga: 1,
+      dataNova: diasAtras(10),
+      qtdNova: 99,
+    });
+
+    // Então
+    expect(qtd).toBe(2);
+  });
+
+  it("dado excluir uma Compra, então desfaz a contribuição dela", () => {
+    // Dado: 3 compras de 1 já somadas (qtdAtual=3); exclui uma delas
+    const qtd = ajustarQtdAposEscritaDeCompra({
+      qtdAtual: 3,
+      ultimoAjuste: null,
+      dataAntiga: diasAtras(1),
+      qtdAntiga: 1,
+      dataNova: null,
+      qtdNova: 0,
+    });
+
+    // Então
+    expect(qtd).toBe(2);
+  });
+
+  it("dado excluir uma Compra mais antiga que o último Ajuste, então não afeta a estimativa atual", () => {
+    // Dado
+    const qtd = ajustarQtdAposEscritaDeCompra({
+      qtdAtual: 4,
+      ultimoAjuste: { em: diasAtras(3) },
+      dataAntiga: diasAtras(10),
+      qtdAntiga: 7,
+      dataNova: null,
+      qtdNova: 0,
+    });
+
+    // Então
+    expect(qtd).toBe(4);
+  });
+
+  it("dado um resultado que ficaria negativo, então nunca fica abaixo de zero", () => {
+    // Dado
+    const qtd = ajustarQtdAposEscritaDeCompra({
+      qtdAtual: 1,
+      ultimoAjuste: null,
+      dataAntiga: diasAtras(1),
+      qtdAntiga: 5,
+      dataNova: null,
+      qtdNova: 0,
+    });
+
+    // Então
+    expect(qtd).toBe(0);
   });
 });
 

@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import type { HistoricoAprendizado } from "@/modules/learning/domain/motor";
-import type { TipoAjuste } from "@/modules/despensa/domain/estimativa";
+import type { HistoricoAprendizado } from "@/modules/aprendizado/domain/motor";
+import type { TipoAjuste } from "@/modules/aprendizado/domain/estimativa";
 
 /*
   Carrega o histórico de proxies (Compras + ajustes) por Item para alimentar o

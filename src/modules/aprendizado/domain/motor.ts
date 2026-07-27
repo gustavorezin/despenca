@@ -8,7 +8,7 @@
   em quem consome. Números e decisão vêm daqui; linguagem também é template simples.
 */
 
-import { diasDesde, type TipoAjuste } from "@/modules/despensa/domain/estimativa";
+import { ajusteDomina, diasDesde, type TipoAjuste } from "./estimativa";
 
 export type MotivoSugestao = "PROVAVELMENTE_ACABANDO" | "RECORRENTE";
 
@@ -47,12 +47,6 @@ function humanizarIntervalo(dias: number): string {
   }
   const d = Math.max(1, Math.round(dias));
   return d === 1 ? "~1 dia" : `~${d} dias`;
-}
-
-function ajusteDomina(h: HistoricoAprendizado): boolean {
-  if (!h.ultimoAjuste) return false;
-  if (!h.ultimaCompraEm) return true;
-  return h.ultimoAjuste.em.getTime() >= h.ultimaCompraEm.getTime();
 }
 
 /**

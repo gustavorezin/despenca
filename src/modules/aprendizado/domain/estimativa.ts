@@ -1,12 +1,11 @@
 /*
-  Estimativa de Despensa — domínio puro (sem I/O). Heurística determinística F0
-  (spec-tecnica §5.2): deriva a confiança da estimativa a partir de proxies
-  (nº de Compras, recência, último ajuste). A pontuação é interna e nunca é
-  exposta: a UI só mostra o semáforo 🟢/🟡/🔴 (ADR-004).
+  Estimativa de Despensa — domínio puro (sem I/O). Metade "estimarDespensa" do
+  motor de aprendizado (spec-tecnica §5.1/§5.2): deriva quantidade e confiança
+  a partir de proxies (nº de Compras, recência, último ajuste). A pontuação é
+  interna e nunca é exposta: a UI só mostra o semáforo 🟢/🟡/🔴 (ADR-004).
+  A outra metade ("gerarSugestao") vive em ./motor.ts.
 
   O "agora" é sempre injetado (`hoje`) para manter as funções testáveis.
-  No Marco 3, o motor de aprendizado formal pode substituir estas funções
-  atrás da interface MotorAprendizado (§5.1).
 */
 
 export type NivelConfianca = "alta" | "media" | "baixa";
@@ -35,36 +34,84 @@ function limitar(n: number, min = 0, max = 1): number {
   return Math.min(max, Math.max(min, n));
 }
 
-/** O ajuste manual manda quando é o evento mais recente do Item. */
-function ajusteDomina(h: HistoricoItem): boolean {
+/** O ajuste manual manda quando é o evento mais recente do Item (ADR-013). */
+export function ajusteDomina(h: {
+  ultimaCompraEm: Date | null;
+  ultimoAjuste: { em: Date } | null;
+}): boolean {
   if (!h.ultimoAjuste) return false;
   if (!h.ultimaCompraEm) return true;
   return h.ultimoAjuste.em.getTime() >= h.ultimaCompraEm.getTime();
 }
 
-export type HistoricoRederivacao = HistoricoItem & {
-  /** Quantidade do Item na Compra de data mais recente (null se nenhuma). */
-  qtdUltimaCompra: number | null;
-};
+/**
+ * Nova `qtdEstimada` após uma escrita em Compra — registrar (Compra nova),
+ * editar ou excluir (ADR-023) — para UM Item afetado. Em vez de recompor a
+ * estimativa do zero (o que exigiria saber o valor exato que "Tem"/"Pouco"
+ * deixaram, e esse valor não é persistido — só "Acabou"/"Preciso" têm
+ * semântica absoluta), desfaz a contribuição antiga da linha desse Item na
+ * Compra — se ela ainda "contava" para a estimativa — e refaz a nova, nas
+ * mesmas condições. "Contar" depende só de a data estar no-ou-após o último
+ * Ajuste (ou não haver Ajuste): um Ajuste redefine o que veio antes dele
+ * (ADR-013) — a Compra nunca precisa saber o valor que o Ajuste fixou,
+ * porque `qtdAtual` já o reflete.
+ *
+ * - Registrar: `dataAntiga=null, qtdAntiga=0` (nada a desfazer).
+ * - Excluir:   `dataNova=null,  qtdNova=0`   (nada a refazer).
+ * - Editar:    os dois lados, com os valores de antes/depois da edição.
+ *
+ * Resultado nunca fica negativo (o pior caso vira 0, papel do "Acabou").
+ */
+export function ajustarQtdAposEscritaDeCompra({
+  qtdAtual,
+  ultimoAjuste,
+  dataAntiga,
+  qtdAntiga,
+  dataNova,
+  qtdNova,
+}: {
+  qtdAtual: number;
+  ultimoAjuste: { em: Date } | null;
+  dataAntiga: Date | null;
+  qtdAntiga: number;
+  dataNova: Date | null;
+  qtdNova: number;
+}): number {
+  const conta = (data: Date | null) =>
+    data !== null && (!ultimoAjuste || data.getTime() >= ultimoAjuste.em.getTime());
+
+  let qtd = qtdAtual;
+  if (conta(dataAntiga)) qtd -= qtdAntiga;
+  if (conta(dataNova)) qtd += qtdNova;
+  return Math.max(0, qtd);
+}
 
 /**
- * Nova `qtdEstimada` de um Item após qualquer mudança nas Compras — registro
- * (inclusive retroativo), edição ou exclusão (ADR-023). `null` significa
- * remover o DespensaItem: a Despensa é dado derivado; sem fonte, ela some.
+ * Nova `qtdEstimada` após um ajuste rápido (ADR-007). "Tem" e "Pouco" afirmam
+ * que o Item ainda existe — nunca deixam a estimativa em zero (zerar é papel
+ * exclusivo do "Acabou"). Se ela já estava zerada (ex.: "Acabou" confirmado
+ * depois com "Tem"), parte da quantidade da última Compra — mesmo fallback da
+ * rederivação (ADR-023) — ou de 1, sem histórico de Compra.
  */
-export function rederivarQtdEstimada(
-  h: HistoricoRederivacao,
-  qtdAtual: number | null,
-): number | null {
-  // Sem nenhuma fonte (nem Compra, nem ajuste) não há o que estimar.
-  if (h.numeroCompras === 0 && !h.ultimoAjuste) return null;
+export function calcularNovaQtdAposAjuste({
+  tipo,
+  valor,
+  qtdAtual,
+  qtdUltimaCompra,
+}: {
+  tipo: TipoAjuste;
+  valor?: number;
+  qtdAtual: number;
+  qtdUltimaCompra: number | null;
+}): number {
+  if (tipo === "ACABOU") return 0;
+  if (tipo === "PRECISO") return valor ?? qtdAtual;
 
-  // Um ajuste manual posterior à última Compra não pode ser atropelado
-  // pela edição de uma Compra antiga.
-  if (ajusteDomina(h)) return qtdAtual ?? 0;
+  const base =
+    qtdAtual > 0 ? qtdAtual : qtdUltimaCompra && qtdUltimaCompra > 0 ? qtdUltimaCompra : 1;
 
-  // Estoque F0 ≈ o que veio na Compra de data mais recente.
-  return h.qtdUltimaCompra ?? qtdAtual ?? 0;
+  if (tipo === "TEM") return base;
+  return base <= 1 ? base : Math.floor(base / 2); // POUCO: reduz, nunca zera.
 }
 
 const PONTUACAO_POR_AJUSTE: Record<TipoAjuste, number> = {

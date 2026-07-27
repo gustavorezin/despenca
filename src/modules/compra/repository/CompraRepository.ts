@@ -7,6 +7,19 @@ type LinhaResolvida = {
   unidade?: string | null;
 };
 
+/** Quantidade de um Item numa Compra — soma de linhas, se houver mais de uma. */
+type ItemNaCompra = { itemId: string; quantidade: number };
+
+function somarPorItem(
+  itens: { itemId: string; quantidade: Prisma.Decimal | number }[],
+): ItemNaCompra[] {
+  const porItem = new Map<string, number>();
+  for (const i of itens) {
+    porItem.set(i.itemId, (porItem.get(i.itemId) ?? 0) + Number(i.quantidade));
+  }
+  return [...porItem].map(([itemId, quantidade]) => ({ itemId, quantidade }));
+}
+
 export const CompraRepository = {
   /**
    * Cria a Compra e suas linhas. Resolve o Morador autor (criadaPorId). Aceita
@@ -53,8 +66,9 @@ export const CompraRepository = {
 
   /**
    * Substitui o cabeçalho e as linhas de uma Compra da Casa (troca total das
-   * linhas — sem diff; o volume é minúsculo). Devolve os itemIds antigos para
-   * a rederivação da Despensa cobrir também os removidos (ADR-023).
+   * linhas — sem diff; o volume é minúsculo). Devolve a data e os itens de
+   * ANTES da troca (data e quantidade por Item), para o ajuste pontual da
+   * Despensa desfazer a contribuição antiga e refazer a nova (ADR-023).
    */
   async atualizarComItens({
     db = prisma,
@@ -70,11 +84,11 @@ export const CompraRepository = {
     descricao: string | null;
     data: Date;
     itens: LinhaResolvida[];
-  }): Promise<{ itemIdsAntigos: string[] }> {
+  }): Promise<{ dataAntiga: Date; itensAntigos: ItemNaCompra[] }> {
     // Guard multi-tenant: só edita Compra da própria Casa.
     const compra = await db.compra.findFirst({
       where: { id: compraId, casaId },
-      select: { id: true, itens: { select: { itemId: true } } },
+      select: { data: true, itens: { select: { itemId: true, quantidade: true } } },
     });
     if (!compra) throw new Error("Compra não encontrada.");
 
@@ -95,12 +109,13 @@ export const CompraRepository = {
       select: { id: true },
     });
 
-    return { itemIdsAntigos: compra.itens.map((l) => l.itemId) };
+    return { dataAntiga: compra.data, itensAntigos: somarPorItem(compra.itens) };
   },
 
   /**
-   * Exclui uma Compra da Casa (cascade apaga as linhas). Devolve os itemIds
-   * afetados para a rederivação da Despensa (ADR-023).
+   * Exclui uma Compra da Casa (cascade apaga as linhas). Devolve a data e os
+   * itens que ela continha (data e quantidade por Item), para o ajuste
+   * pontual da Despensa desfazer a contribuição dela (ADR-023).
    */
   async excluir({
     db = prisma,
@@ -110,16 +125,16 @@ export const CompraRepository = {
     db?: Prisma.TransactionClient;
     casaId: string;
     id: string;
-  }): Promise<{ itemIds: string[] }> {
+  }): Promise<{ data: Date; itens: ItemNaCompra[] }> {
     const compra = await db.compra.findFirst({
       where: { id, casaId },
-      select: { id: true, itens: { select: { itemId: true } } },
+      select: { data: true, itens: { select: { itemId: true, quantidade: true } } },
     });
     if (!compra) throw new Error("Compra não encontrada.");
 
     await db.compra.delete({ where: { id }, select: { id: true } });
 
-    return { itemIds: compra.itens.map((l) => l.itemId) };
+    return { data: compra.data, itens: somarPorItem(compra.itens) };
   },
 
   /** Histórico da Casa, mais recente primeiro, com a contagem de itens. */

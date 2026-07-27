@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { GrupoMercado } from "@/modules/lista/services/itensDoMercado";
 import {
@@ -11,24 +11,17 @@ import {
 import { comoUnidade, type Unidade } from "@/modules/item/domain/unidades";
 import { registrarCompraAction } from "../registrar/actions";
 import { FormularioCompra, type ChipCompra } from "../registrar/FormularioCompra";
-import { BottomSheet } from "@/shared/ui/BottomSheet";
+import { SheetAdicionarItem } from "@/shared/ui/SheetAdicionarItem";
+import type { ItemBusca } from "@/shared/ui/useBuscaItens";
 import {
   IconeX,
   IconeChevronEsquerda,
   IconeCheck,
   IconeMais,
   IconeMenos,
-  IconeLupa,
 } from "@/shared/ui/icones";
 
 type Passo = "marcar" | "confirmar";
-
-type ItemBusca = {
-  id: string;
-  nomeCanonico: string;
-  categoria: string | null;
-  unidadePadrao: string | null;
-};
 
 type ItemChecklist = {
   chave: string;
@@ -60,34 +53,6 @@ export function ModoMercado({ grupos }: { grupos: GrupoMercado[] }) {
     })),
   );
   const [addOpen, setAddOpen] = useState(false);
-  const [termo, setTermo] = useState("");
-  const [sugestoes, setSugestoes] = useState<ItemBusca[]>([]);
-
-  // Autocomplete do "Adicionar item" (mesmo padrão do registro, ADR-005).
-  useEffect(() => {
-    if (!addOpen) return;
-    const q = termo.trim();
-    const controlador = new AbortController();
-    const t = setTimeout(async () => {
-      if (q.length < 2) {
-        setSugestoes([]);
-        return;
-      }
-      try {
-        const res = await fetch(`/api/itens?termo=${encodeURIComponent(q)}`, {
-          signal: controlador.signal,
-        });
-        const dados = await res.json();
-        setSugestoes(dados.itens ?? []);
-      } catch {
-        /* aborto/rede — ignora */
-      }
-    }, 200);
-    return () => {
-      clearTimeout(t);
-      controlador.abort();
-    };
-  }, [termo, addOpen]);
 
   const total = itens.length;
   const n = itens.filter((i) => i.marcado).length;
@@ -101,8 +66,6 @@ export function ModoMercado({ grupos }: { grupos: GrupoMercado[] }) {
       unidade,
       categoria,
     }));
-
-  const semResultados = termo.trim().length >= 2 && sugestoes.length === 0;
 
   function alternar(chave: string) {
     setItens((is) =>
@@ -123,14 +86,10 @@ export function ModoMercado({ grupos }: { grupos: GrupoMercado[] }) {
   // Item novo entra na sua categoria (ou "Sem categoria"), desmarcado — o
   // usuário marca ao pegar da prateleira. Se já está na checklist, soma +1.
   function adicionar(nome: string, item?: ItemBusca) {
-    const limpo = nome.trim();
-    if (!limpo) return;
     setAddOpen(false);
-    setTermo("");
-    setSugestoes([]);
     setItens((is) => {
       const idx = is.findIndex(
-        (i) => i.nome.toLowerCase() === limpo.toLowerCase(),
+        (i) => i.nome.toLowerCase() === nome.toLowerCase(),
       );
       if (idx >= 0) {
         return is.map((i, k) =>
@@ -140,8 +99,8 @@ export function ModoMercado({ grupos }: { grupos: GrupoMercado[] }) {
       return [
         ...is,
         {
-          chave: item?.id ?? `novo:${limpo}`,
-          nome: limpo,
+          chave: item?.id ?? `novo:${nome}`,
+          nome,
           quantidade: 1,
           unidade: comoUnidade(item?.unidadePadrao),
           categoria: comoCategoria(item?.categoria),
@@ -314,74 +273,11 @@ export function ModoMercado({ grupos }: { grupos: GrupoMercado[] }) {
       </div>
 
       {/* Adicionar item que não estava na Lista (ADR-005) */}
-      <BottomSheet
+      <SheetAdicionarItem
         aberto={addOpen}
-        aoFechar={() => {
-          setAddOpen(false);
-          setTermo("");
-          setSugestoes([]);
-        }}
-        ariaLabel="Adicionar item"
-      >
-        <h2 className="mb-3.5 text-[20px] font-extrabold tracking-tight text-tinta">
-          Adicionar item
-        </h2>
-        <div className="flex items-center gap-2.5 rounded-[15px] border-[1.5px] border-borda-forte bg-superficie px-3.5 py-3 focus-within:border-acento">
-          <span className="text-suave-2">
-            <IconeLupa tamanho={19} />
-          </span>
-          <input
-            value={termo}
-            onChange={(e) => setTermo(e.target.value)}
-            placeholder="Buscar item…"
-            autoFocus
-            className="flex-1 bg-transparent text-[16px] text-tinta outline-none"
-          />
-        </div>
-        <div className="mt-3 max-h-[46vh] overflow-y-auto">
-          {termo.trim().length < 2 && (
-            <div className="py-6 text-center text-[13.5px] text-suave-2">
-              Digite ao menos 2 letras para buscar.
-            </div>
-          )}
-          {sugestoes.map((s) => (
-            <button
-              key={s.id}
-              type="button"
-              onClick={() => adicionar(s.nomeCanonico, s)}
-              className="mb-2 flex w-full items-center justify-between gap-2.5 rounded-[14px] border border-borda bg-superficie p-3.5 text-left"
-            >
-              <span>
-                <span className="block text-[15px] font-bold text-tinta">
-                  {s.nomeCanonico}
-                </span>
-                {s.categoria && (
-                  <span className="mt-px block text-[12px] text-suave-2">
-                    {s.categoria}
-                  </span>
-                )}
-              </span>
-              <span className="flex text-acento">
-                <IconeMais tamanho={20} strokeWidth={2.3} />
-              </span>
-            </button>
-          ))}
-          {semResultados && (
-            <button
-              type="button"
-              onClick={() => adicionar(termo)}
-              className="flex w-full items-center gap-2.5 rounded-[14px] bg-superficie p-3.5 text-left text-[14.5px] font-bold text-acento"
-              style={{
-                border:
-                  "1.5px dashed color-mix(in srgb, var(--color-acento) 32%, #fff)",
-              }}
-            >
-              <IconeMais tamanho={18} strokeWidth={2.3} />
-              Adicionar “{termo.trim()}”
-            </button>
-          )}
-        </div>
-      </BottomSheet>
+        aoFechar={() => setAddOpen(false)}
+        aoAdicionar={adicionar}
+      />
     </div>
   );
 }

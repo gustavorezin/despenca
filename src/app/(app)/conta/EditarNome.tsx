@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { atualizarNomeUsuario } from "./actions";
+import { atualizarNomeUsuarioAction } from "./actions";
 
 // Card de perfil com edição inline do nome. Em repouso mostra nome + email
 // (fallback "Você" só para exibição); ao "Editar", troca por input + Salvar.
@@ -23,7 +23,7 @@ export default function EditarNome({
     const nome = valor.trim();
     if (!nome) return;
     iniciar(async () => {
-      await atualizarNomeUsuario(nome);
+      await atualizarNomeUsuarioAction(nome);
       setEditando(false);
     });
   }

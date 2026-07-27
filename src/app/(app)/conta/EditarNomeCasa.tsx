@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { atualizarNomeCasa } from "./actions";
+import { atualizarNomeCasaAction } from "./actions";
 
 // Card da Casa com edição inline do nome, mesmo padrão do perfil (EditarNome).
 // Em repouso mostra o rótulo + nome; ao "Editar", troca por input + Salvar.
@@ -16,7 +16,7 @@ export default function EditarNomeCasa({ nomeAtual }: { nomeAtual: string }) {
     const nome = valor.trim();
     if (!nome) return;
     iniciar(async () => {
-      await atualizarNomeCasa(nome);
+      await atualizarNomeCasaAction(nome);
       setEditando(false);
     });
   }

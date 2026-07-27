@@ -1,7 +1,7 @@
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { AprendizadoRepository } from "@/modules/learning/repository/AprendizadoRepository";
-import { gerarSugestao } from "@/modules/learning/domain/motor";
+import { AprendizadoRepository } from "@/modules/aprendizado/repository/AprendizadoRepository";
+import { gerarSugestao } from "@/modules/aprendizado/domain/motor";
 import { ListaRepository } from "@/modules/lista/repository/ListaRepository";
 
 /**
@@ -26,6 +26,12 @@ export async function recalcularSugestoes({
     ListaRepository.bloqueadosEDispensados({ db, casaId }),
   ]);
 
+  const novas: {
+    itemId: string;
+    motivo: NonNullable<ReturnType<typeof gerarSugestao>>["motivo"];
+    qtdSugerida: number;
+  }[] = [];
+
   for (const [itemId, historico] of historicos) {
     if (bloqueados.has(itemId)) continue;
 
@@ -42,12 +48,12 @@ export async function recalcularSugestoes({
     const sugestao = gerarSugestao(historico, hoje);
     if (!sugestao) continue;
 
-    await ListaRepository.criarSugestao({
-      db,
-      casaId,
+    novas.push({
       itemId,
       motivo: sugestao.motivo,
       qtdSugerida: sugestao.qtdSugerida,
     });
   }
+
+  await ListaRepository.criarSugestoes({ db, casaId, sugestoes: novas });
 }
