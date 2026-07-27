@@ -44,29 +44,46 @@ export function ajusteDomina(h: {
   return h.ultimoAjuste.em.getTime() >= h.ultimaCompraEm.getTime();
 }
 
-export type HistoricoRederivacao = HistoricoItem & {
-  /** Quantidade do Item na Compra de data mais recente (null se nenhuma). */
-  qtdUltimaCompra: number | null;
-};
-
 /**
- * Nova `qtdEstimada` de um Item após qualquer mudança nas Compras — registro
- * (inclusive retroativo), edição ou exclusão (ADR-023). `null` significa
- * remover o DespensaItem: a Despensa é dado derivado; sem fonte, ela some.
+ * Nova `qtdEstimada` após uma escrita em Compra — registrar (Compra nova),
+ * editar ou excluir (ADR-023) — para UM Item afetado. Em vez de recompor a
+ * estimativa do zero (o que exigiria saber o valor exato que "Tem"/"Pouco"
+ * deixaram, e esse valor não é persistido — só "Acabou"/"Preciso" têm
+ * semântica absoluta), desfaz a contribuição antiga da linha desse Item na
+ * Compra — se ela ainda "contava" para a estimativa — e refaz a nova, nas
+ * mesmas condições. "Contar" depende só de a data estar no-ou-após o último
+ * Ajuste (ou não haver Ajuste): um Ajuste redefine o que veio antes dele
+ * (ADR-013) — a Compra nunca precisa saber o valor que o Ajuste fixou,
+ * porque `qtdAtual` já o reflete.
+ *
+ * - Registrar: `dataAntiga=null, qtdAntiga=0` (nada a desfazer).
+ * - Excluir:   `dataNova=null,  qtdNova=0`   (nada a refazer).
+ * - Editar:    os dois lados, com os valores de antes/depois da edição.
+ *
+ * Resultado nunca fica negativo (o pior caso vira 0, papel do "Acabou").
  */
-export function rederivarQtdEstimada(
-  h: HistoricoRederivacao,
-  qtdAtual: number | null,
-): number | null {
-  // Sem nenhuma fonte (nem Compra, nem ajuste) não há o que estimar.
-  if (h.numeroCompras === 0 && !h.ultimoAjuste) return null;
+export function ajustarQtdAposEscritaDeCompra({
+  qtdAtual,
+  ultimoAjuste,
+  dataAntiga,
+  qtdAntiga,
+  dataNova,
+  qtdNova,
+}: {
+  qtdAtual: number;
+  ultimoAjuste: { em: Date } | null;
+  dataAntiga: Date | null;
+  qtdAntiga: number;
+  dataNova: Date | null;
+  qtdNova: number;
+}): number {
+  const conta = (data: Date | null) =>
+    data !== null && (!ultimoAjuste || data.getTime() >= ultimoAjuste.em.getTime());
 
-  // Um ajuste manual posterior à última Compra não pode ser atropelado
-  // pela edição de uma Compra antiga.
-  if (ajusteDomina(h)) return qtdAtual ?? 0;
-
-  // Estoque F0 ≈ o que veio na Compra de data mais recente.
-  return h.qtdUltimaCompra ?? qtdAtual ?? 0;
+  let qtd = qtdAtual;
+  if (conta(dataAntiga)) qtd -= qtdAntiga;
+  if (conta(dataNova)) qtd += qtdNova;
+  return Math.max(0, qtd);
 }
 
 /**

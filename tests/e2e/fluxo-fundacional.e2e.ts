@@ -12,6 +12,19 @@ import {
   ADR-013). Roda numa Casa descartável criada direto no banco de dev.
 */
 
+async function registrarCompraManual(page: import("@playwright/test").Page, item: string) {
+  await page.goto("/registrar");
+  await page.getByRole("button", { name: /Manual/ }).click();
+  await page.getByPlaceholder("Buscar item para adicionar…").fill(item);
+
+  const existente = page.getByRole("button", { name: item, exact: true });
+  const novo = page.getByRole("button", { name: new RegExp(`Adicionar .${item}.`) });
+  await existente.or(novo).first().click();
+
+  await page.getByRole("button", { name: /Registrar Compra · 1/ }).click();
+  await page.waitForURL("**/despensa");
+}
+
 test.describe("fluxo fundacional", () => {
   let sessao: SessaoDeTeste;
 
@@ -38,14 +51,9 @@ test.describe("fluxo fundacional", () => {
     await expect(page.getByText("Ainda estou aprendendo")).toBeVisible();
 
     // Quando: registro manual da 1ª Compra (ADR-005)
-    await page.goto("/registrar");
-    await page.getByRole("button", { name: /Manual/ }).click();
-    await page.getByPlaceholder("Buscar item para adicionar…").fill("Arroz");
-    await page.getByRole("button", { name: /Adicionar “Arroz”/ }).click();
-    await page.getByRole("button", { name: /Registrar Compra · 1/ }).click();
+    await registrarCompraManual(page, "Arroz");
 
     // Então: efeito imediato — Despensa preenchida (§4.2)
-    await page.waitForURL("**/despensa");
     await expect(page.getByRole("button", { name: "Arroz" })).toBeVisible();
 
     // Quando: ajuste rápido "Acabou" (ADR-007)
@@ -68,5 +76,26 @@ test.describe("fluxo fundacional", () => {
     // Então: "Tem" afirma que o Item existe — a quantidade não pode mais
     // aparecer como "acabou"
     await expect(page.getByText("acabou", { exact: true })).toHaveCount(0);
+  });
+
+  test("dado 3 Compras manuais do mesmo Item, então a Despensa soma as quantidades", async ({
+    page,
+    context,
+    baseURL,
+  }) => {
+    // Dado: bug relatado — registrar o mesmo Item em Compras separadas
+    // mantinha a Despensa em 1un, como se cada registro substituísse o
+    // anterior em vez de somar (§4.3: "quantidade sobe")
+    await context.addCookies([
+      { name: "authjs.session-token", value: sessao.sessionToken, url: baseURL! },
+    ]);
+
+    // Quando: 3 Compras manuais de 1 unidade cada do mesmo Item
+    await registrarCompraManual(page, "Feijão");
+    await registrarCompraManual(page, "Feijão");
+    await registrarCompraManual(page, "Feijão");
+
+    // Então: 1 + 1 + 1 — a Despensa acumula, nunca substitui
+    await expect(page.getByText("~3 un")).toBeVisible();
   });
 });
